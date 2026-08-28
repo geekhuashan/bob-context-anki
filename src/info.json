@@ -1,7 +1,7 @@
 {
   "identifier": "com.huashan.bobplug.context-anki-probe",
   "category": "translate",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "name": "上下文词卡",
   "summary": "从整句中选择目标词并创建带上下文的 Anki 卡片",
   "author": "geekhuashan",
@@ -44,6 +44,54 @@
         "placeholderText": "MiniMax-M2.1"
       },
       "desc": "短结构化注释不启用推理。"
+    },
+    {
+      "identifier": "ttsApiKey",
+      "type": "text",
+      "title": "发音 API Key",
+      "defaultValue": "",
+      "textConfig": {
+        "type": "secure",
+        "height": 40,
+        "placeholderText": "留空则复用注释 API Key"
+      },
+      "desc": "可单独填写 MiniMax Key；留空时复用上面的注释 API Key。"
+    },
+    {
+      "identifier": "ttsApiBaseUrl",
+      "type": "text",
+      "title": "发音 API 地址",
+      "defaultValue": "https://api.minimaxi.com",
+      "textConfig": {
+        "type": "visible",
+        "height": 40,
+        "placeholderText": "https://api.minimaxi.com"
+      },
+      "desc": "MiniMax 地址；可填写服务根地址、/v1 地址或完整 /v1/t2a_v2 地址。"
+    },
+    {
+      "identifier": "ttsModel",
+      "type": "text",
+      "title": "发音模型",
+      "defaultValue": "speech-2.8-hd",
+      "textConfig": {
+        "type": "visible",
+        "height": 40,
+        "placeholderText": "speech-2.8-hd"
+      },
+      "desc": "MiniMax 同步语音合成模型。"
+    },
+    {
+      "identifier": "ttsVoiceId",
+      "type": "text",
+      "title": "发音音色",
+      "defaultValue": "English_Graceful_Lady",
+      "textConfig": {
+        "type": "visible",
+        "height": 40,
+        "placeholderText": "English_Graceful_Lady"
+      },
+      "desc": "用于英语单词发音，语速固定为 0.85。"
     },
     {
       "identifier": "minimumCefrLevel",

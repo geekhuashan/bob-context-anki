@@ -38,7 +38,9 @@ Vocabulary Modern
 8. `Source`
 9. `Audio`
 
-插件会写入 `Word`、`Phonetic`、`Definition`、`DefinitionZH`、`ContextMeaning`、`ExampleSentence`、`SentenceTranslation` 和 `Source`。`Audio` 暂时保持空白，可由其他 Anki 工作流后续补全。
+插件会写入全部九个字段。`Audio` 的内容形如 `[sound:bob-context-daunting.mp3]`；对应 MP3 由 MiniMax 生成并通过 AnkiConnect 保存到 Anki 媒体库。
+
+请保留正面模板中的 `{{Audio}}`，否则音频虽然已经入库，卡片上也不会显示播放按钮。
 
 ## 4. 最小卡片模板
 

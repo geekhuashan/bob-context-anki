@@ -2,8 +2,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  audioField,
   buildContextNote,
   escapeHtml,
+  mediaFilename,
   saveContextNote,
 } = require('../src/anki');
 
@@ -14,12 +16,34 @@ const annotation = {
   contextMeaning: '表示动作没有延迟。',
   sentenceTranslation: '我立即采取了行动。',
 };
+const audioBase64 = 'SUQzBAAAAAA=';
 
-test('builds a Vocabulary Modern note with word and sentence context', () => {
+function noteFields(values = {}) {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, { value }]),
+  );
+}
+
+function completeFields(overrides = {}) {
+  return noteFields({
+    Word: 'immediately',
+    Phonetic: annotation.phonetic,
+    Definition: annotation.definition,
+    DefinitionZH: annotation.definitionZH,
+    ContextMeaning: annotation.contextMeaning,
+    SentenceTranslation: annotation.sentenceTranslation,
+    Audio: audioField(mediaFilename('immediately')),
+    ...overrides,
+  });
+}
+
+test('builds a Vocabulary Modern note with context and playable audio', () => {
+  const audio = audioField(mediaFilename('immediately'));
   const note = buildContextNote({
     word: 'immediately',
     context: 'I took action immediately.',
     annotation,
+    audio,
   });
 
   assert.equal(note.deckName, 'English::Vocabulary');
@@ -33,17 +57,26 @@ test('builds a Vocabulary Modern note with word and sentence context', () => {
     note.fields.SentenceTranslation,
     annotation.sentenceTranslation,
   );
+  assert.equal(note.fields.Audio, '[sound:bob-context-immediately.mp3]');
   assert.equal(note.fields.Source, 'Bob 划词');
   assert.deepEqual(note.tags, ['bob', 'context-word']);
 });
 
-test('checks duplicates, generates annotations, then adds the note', async () => {
+test('generates annotation and pronunciation in parallel before adding', async () => {
   const calls = [];
+  let annotationFinished = false;
+  let storedData;
+  let addedNote;
   const request = async ({ body }) => {
     calls.push(body.action);
     if (body.action === 'canAddNotes') {
       return { data: { result: [true], error: null } };
     }
+    if (body.action === 'storeMediaFile') {
+      storedData = body.params.data;
+      return { data: { result: body.params.filename, error: null } };
+    }
+    addedNote = body.params.note;
     return { data: { result: 123456, error: null } };
   };
 
@@ -53,17 +86,32 @@ test('checks duplicates, generates annotations, then adds the note', async () =>
     request,
     annotationProvider: async () => {
       calls.push('annotation');
+      await new Promise((resolve) => setImmediate(resolve));
+      annotationFinished = true;
       return annotation;
+    },
+    pronunciationProvider: async () => {
+      calls.push('pronunciation');
+      assert.equal(annotationFinished, false);
+      return audioBase64;
     },
   });
 
   assert.deepEqual(result, { status: 'added', noteId: 123456 });
-  assert.deepEqual(calls, ['canAddNotes', 'annotation', 'addNote']);
+  assert.deepEqual(calls, [
+    'canAddNotes',
+    'annotation',
+    'pronunciation',
+    'storeMediaFile',
+    'addNote',
+  ]);
+  assert.equal(storedData, audioBase64);
+  assert.equal(addedNote.fields.Audio, '[sound:bob-context-immediately.mp3]');
 });
 
-test('does not call addNote when Anki rejects a duplicate', async () => {
+test('complete duplicates consume no annotation or pronunciation quota', async () => {
   const calls = [];
-  let annotationCalls = 0;
+  let providerCalls = 0;
   const request = async ({ body }) => {
     calls.push(body.action);
     if (body.action === 'canAddNotes') {
@@ -78,16 +126,7 @@ test('does not call addNote when Anki rejects a duplicate', async () => {
           {
             noteId: 42,
             tags: ['bob', 'context-word'],
-            fields: Object.fromEntries(
-              Object.entries({
-                Word: 'immediately',
-                Phonetic: annotation.phonetic,
-                Definition: annotation.definition,
-                DefinitionZH: annotation.definitionZH,
-                ContextMeaning: annotation.contextMeaning,
-                SentenceTranslation: annotation.sentenceTranslation,
-              }).map(([key, value]) => [key, { value }]),
-            ),
+            fields: completeFields(),
           },
         ],
         error: null,
@@ -100,17 +139,127 @@ test('does not call addNote when Anki rejects a duplicate', async () => {
     context: 'I took action immediately.',
     request,
     annotationProvider: async () => {
-      annotationCalls += 1;
+      providerCalls += 1;
       return annotation;
+    },
+    pronunciationProvider: async () => {
+      providerCalls += 1;
+      return audioBase64;
     },
   });
 
   assert.deepEqual(result, { status: 'duplicate' });
   assert.deepEqual(calls, ['canAddNotes', 'findNotes', 'notesInfo']);
-  assert.equal(annotationCalls, 0);
+  assert.equal(providerCalls, 0);
 });
 
-test('fills annotations on an incomplete card created by this plugin', async () => {
+test('repairs only missing audio without regenerating annotations', async () => {
+  const calls = [];
+  let annotationCalls = 0;
+  let updatedFields;
+  const request = async ({ body }) => {
+    calls.push(body.action);
+    if (body.action === 'canAddNotes') {
+      return { data: { result: [false], error: null } };
+    }
+    if (body.action === 'findNotes') {
+      return { data: { result: [42], error: null } };
+    }
+    if (body.action === 'notesInfo') {
+      return {
+        data: {
+          result: [
+            {
+              noteId: 42,
+              tags: ['bob', 'context-word'],
+              fields: completeFields({ Audio: '' }),
+            },
+          ],
+          error: null,
+        },
+      };
+    }
+    if (body.action === 'storeMediaFile') {
+      return { data: { result: body.params.filename, error: null } };
+    }
+    updatedFields = body.params.note.fields;
+    return { data: { result: null, error: null } };
+  };
+
+  const result = await saveContextNote({
+    word: 'immediately',
+    context: 'I took action immediately.',
+    request,
+    annotationProvider: async () => {
+      annotationCalls += 1;
+      return annotation;
+    },
+    pronunciationProvider: async () => audioBase64,
+  });
+
+  assert.deepEqual(result, {
+    status: 'updated',
+    noteId: 42,
+    repaired: { annotation: false, audio: true },
+  });
+  assert.equal(annotationCalls, 0);
+  assert.deepEqual(updatedFields, {
+    Audio: '[sound:bob-context-immediately.mp3]',
+  });
+  assert.deepEqual(calls, [
+    'canAddNotes',
+    'findNotes',
+    'notesInfo',
+    'storeMediaFile',
+    'updateNoteFields',
+  ]);
+});
+
+test('repairs only missing annotation fields without regenerating audio', async () => {
+  let pronunciationCalls = 0;
+  let updatedFields;
+  const request = async ({ body }) => {
+    if (body.action === 'canAddNotes') {
+      return { data: { result: [false], error: null } };
+    }
+    if (body.action === 'findNotes') {
+      return { data: { result: [42], error: null } };
+    }
+    if (body.action === 'notesInfo') {
+      return {
+        data: {
+          result: [
+            {
+              noteId: 42,
+              tags: ['bob', 'context-word'],
+              fields: completeFields({ DefinitionZH: '' }),
+            },
+          ],
+          error: null,
+        },
+      };
+    }
+    updatedFields = body.params.note.fields;
+    return { data: { result: null, error: null } };
+  };
+
+  const result = await saveContextNote({
+    word: 'immediately',
+    context: 'I took action immediately.',
+    request,
+    annotationProvider: async () => annotation,
+    pronunciationProvider: async () => {
+      pronunciationCalls += 1;
+      return audioBase64;
+    },
+  });
+
+  assert.deepEqual(result.repaired, { annotation: true, audio: false });
+  assert.equal(pronunciationCalls, 0);
+  assert.deepEqual(updatedFields, { DefinitionZH: annotation.definitionZH });
+});
+
+test('repairs annotations and audio together on a plugin-owned card', async () => {
   const calls = [];
   let updatedFields;
   const request = async ({ body }) => {
@@ -128,15 +277,15 @@ test('fills annotations on an incomplete card created by this plugin', async () 
             {
               noteId: 42,
               tags: ['bob', 'context-word'],
-              fields: {
-                Word: { value: 'immediately' },
-                Definition: { value: '' },
-              },
+              fields: noteFields({ Word: 'immediately' }),
             },
           ],
           error: null,
         },
       };
+    }
+    if (body.action === 'storeMediaFile') {
+      return { data: { result: body.params.filename, error: null } };
     }
     updatedFields = body.params.note.fields;
     return { data: { result: null, error: null } };
@@ -147,22 +296,24 @@ test('fills annotations on an incomplete card created by this plugin', async () 
     context: 'I took action immediately.',
     request,
     annotationProvider: async () => annotation,
+    pronunciationProvider: async () => audioBase64,
   });
 
-  assert.deepEqual(result, { status: 'updated', noteId: 42 });
+  assert.deepEqual(result.repaired, { annotation: true, audio: true });
+  assert.equal(updatedFields.DefinitionZH, annotation.definitionZH);
+  assert.equal(updatedFields.Audio, '[sound:bob-context-immediately.mp3]');
   assert.deepEqual(calls, [
     'canAddNotes',
     'findNotes',
     'notesInfo',
+    'storeMediaFile',
     'updateNoteFields',
   ]);
-  assert.equal(updatedFields.DefinitionZH, annotation.definitionZH);
-  assert.equal(updatedFields.SentenceTranslation, annotation.sentenceTranslation);
 });
 
 test('does not enrich incomplete duplicate cards owned by another workflow', async () => {
   const calls = [];
-  let annotationCalls = 0;
+  let providerCalls = 0;
   const request = async ({ body }) => {
     calls.push(body.action);
     if (body.action === 'canAddNotes') {
@@ -177,10 +328,7 @@ test('does not enrich incomplete duplicate cards owned by another workflow', asy
           {
             noteId: 42,
             tags: ['vocab'],
-            fields: {
-              Word: { value: 'immediately' },
-              Definition: { value: '' },
-            },
+            fields: noteFields({ Word: 'immediately', Definition: '' }),
           },
         ],
         error: null,
@@ -193,21 +341,63 @@ test('does not enrich incomplete duplicate cards owned by another workflow', asy
     context: 'I took action immediately.',
     request,
     annotationProvider: async () => {
-      annotationCalls += 1;
+      providerCalls += 1;
       return annotation;
+    },
+    pronunciationProvider: async () => {
+      providerCalls += 1;
+      return audioBase64;
     },
   });
 
   assert.deepEqual(result, { status: 'duplicate' });
-  assert.equal(annotationCalls, 0);
+  assert.equal(providerCalls, 0);
   assert.deepEqual(calls, ['canAddNotes', 'findNotes', 'notesInfo']);
 });
 
-test('does not call addNote when annotation generation fails', async () => {
+test('provider failures do not store media or create a note', async () => {
+  for (const failedProvider of ['annotation', 'pronunciation']) {
+    const calls = [];
+    const request = async ({ body }) => {
+      calls.push(body.action);
+      return { data: { result: [true], error: null } };
+    };
+
+    await assert.rejects(
+      saveContextNote({
+        word: 'immediately',
+        context: 'I took action immediately.',
+        request,
+        annotationProvider: async () => {
+          if (failedProvider === 'annotation') {
+            throw new Error('annotation failed');
+          }
+          return annotation;
+        },
+        pronunciationProvider: async () => {
+          if (failedProvider === 'pronunciation') {
+            throw new Error('pronunciation failed');
+          }
+          return audioBase64;
+        },
+      }),
+      new RegExp(`${failedProvider} failed`),
+    );
+    assert.deepEqual(calls, ['canAddNotes']);
+  }
+});
+
+test('media storage failure does not create or update a note', async () => {
   const calls = [];
   const request = async ({ body }) => {
     calls.push(body.action);
-    return { data: { result: [true], error: null } };
+    if (body.action === 'canAddNotes') {
+      return { data: { result: [true], error: null } };
+    }
+    if (body.action === 'storeMediaFile') {
+      throw new Error('media failed');
+    }
+    assert.fail(`unexpected action: ${body.action}`);
   };
 
   await assert.rejects(
@@ -215,13 +405,21 @@ test('does not call addNote when annotation generation fails', async () => {
       word: 'immediately',
       context: 'I took action immediately.',
       request,
-      annotationProvider: async () => {
-        throw new Error('annotation failed');
-      },
+      annotationProvider: async () => annotation,
+      pronunciationProvider: async () => audioBase64,
     }),
-    /annotation failed/,
+    /media failed/,
   );
-  assert.deepEqual(calls, ['canAddNotes']);
+  assert.deepEqual(calls, ['canAddNotes', 'storeMediaFile']);
+});
+
+test('uses deterministic safe media filenames', () => {
+  assert.equal(mediaFilename('Daunting'), 'bob-context-daunting.mp3');
+  assert.equal(mediaFilename('follow-up'), 'bob-context-follow-up.mp3');
+  assert.equal(
+    audioField(mediaFilename('Daunting')),
+    '[sound:bob-context-daunting.mp3]',
+  );
 });
 
 test('escapes HTML before storing screen and model text', () => {

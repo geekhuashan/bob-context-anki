@@ -1,6 +1,6 @@
 {
   "name": "context-anki",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "从整句中选择目标词并创建带上下文的 Anki 卡片",
   "homepage": "https://github.com/geekhuashan/bob-context-anki",
   "repository": {

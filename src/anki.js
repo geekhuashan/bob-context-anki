@@ -17,7 +17,7 @@ function escapeHtml(value) {
     .replaceAll('"', '&quot;');
 }
 
-function buildContextNote({ word, context, annotation = {} }) {
+function buildContextNote({ word, context, annotation = {}, audio = '' }) {
   return {
     deckName: DECK_NAME,
     modelName: MODEL_NAME,
@@ -30,7 +30,7 @@ function buildContextNote({ word, context, annotation = {} }) {
       ExampleSentence: escapeHtml(context),
       SentenceTranslation: escapeHtml(annotation.sentenceTranslation),
       Source: 'Bob 划词',
-      Audio: '',
+      Audio: audio,
     },
     options: {
       allowDuplicate: false,
@@ -52,6 +52,28 @@ function buildAnnotationFields(annotation) {
       escapeHtml(annotation[source]),
     ]),
   );
+}
+
+function buildMissingAnnotationFields(annotation, note) {
+  return Object.fromEntries(
+    Object.entries(buildAnnotationFields(annotation)).filter(([field]) =>
+      !fieldValue(note, field),
+    ),
+  );
+}
+
+function mediaFilename(word) {
+  const safeWord = String(word || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!safeWord) throw new Error('Cannot build a pronunciation filename');
+  return `bob-context-${safeWord}.mp3`;
+}
+
+function audioField(filename) {
+  return `[sound:${filename}]`;
 }
 
 function unwrapAnkiResponse(response) {
@@ -104,10 +126,11 @@ async function findIncompleteContextNote(word, request) {
         fieldValue(note, 'Word').toLowerCase() === word.toLowerCase();
       const owned =
         Array.isArray(note.tags) && note.tags.includes('context-word');
-      const complete = Object.values(ANNOTATION_FIELD_MAP).every((field) =>
-        fieldValue(note, field),
+      const annotationsComplete = Object.values(ANNOTATION_FIELD_MAP).every(
+        (field) => fieldValue(note, field),
       );
-      return exactWord && owned && !complete;
+      const audioComplete = Boolean(fieldValue(note, 'Audio'));
+      return exactWord && owned && !(annotationsComplete && audioComplete);
     }) || null
   );
 }
@@ -117,6 +140,7 @@ async function saveContextNote({
   context,
   request,
   annotationProvider,
+  pronunciationProvider,
 }) {
   const duplicateProbe = buildContextNote({ word, context });
   const canAdd = await ankiRequest(
@@ -129,28 +153,78 @@ async function saveContextNote({
     const incompleteNote = await findIncompleteContextNote(word, request);
     if (!incompleteNote) return { status: 'duplicate' };
 
-    if (typeof annotationProvider !== 'function') {
+    const needsAnnotation = Object.values(ANNOTATION_FIELD_MAP).some(
+      (field) => !fieldValue(incompleteNote, field),
+    );
+    const needsAudio = !fieldValue(incompleteNote, 'Audio');
+    if (needsAnnotation && typeof annotationProvider !== 'function') {
       throw new Error('Annotation provider is missing');
     }
-    const annotation = await annotationProvider();
+    if (needsAudio && typeof pronunciationProvider !== 'function') {
+      throw new Error('Pronunciation provider is missing');
+    }
+
+    const [annotation, audioBase64] = await Promise.all([
+      needsAnnotation ? annotationProvider() : null,
+      needsAudio ? pronunciationProvider() : null,
+    ]);
+    const fields = needsAnnotation
+      ? buildMissingAnnotationFields(annotation, incompleteNote)
+      : {};
+    if (needsAudio) {
+      const filename = mediaFilename(word);
+      const storedFilename = await ankiRequest(
+        'storeMediaFile',
+        { filename, data: audioBase64 },
+        request,
+      );
+      if (storedFilename !== filename) {
+        throw new Error('AnkiConnect did not store the pronunciation media');
+      }
+      fields.Audio = audioField(filename);
+    }
     await ankiRequest(
       'updateNoteFields',
       {
         note: {
           id: incompleteNote.noteId,
-          fields: buildAnnotationFields(annotation),
+          fields,
         },
       },
       request,
     );
-    return { status: 'updated', noteId: incompleteNote.noteId };
+    return {
+      status: 'updated',
+      noteId: incompleteNote.noteId,
+      repaired: { annotation: needsAnnotation, audio: needsAudio },
+    };
   }
 
   if (typeof annotationProvider !== 'function') {
     throw new Error('Annotation provider is missing');
   }
-  const annotation = await annotationProvider();
-  const note = buildContextNote({ word, context, annotation });
+  if (typeof pronunciationProvider !== 'function') {
+    throw new Error('Pronunciation provider is missing');
+  }
+  const [annotation, audioBase64] = await Promise.all([
+    annotationProvider(),
+    pronunciationProvider(),
+  ]);
+  const filename = mediaFilename(word);
+  const storedFilename = await ankiRequest(
+    'storeMediaFile',
+    { filename, data: audioBase64 },
+    request,
+  );
+  if (storedFilename !== filename) {
+    throw new Error('AnkiConnect did not store the pronunciation media');
+  }
+  const note = buildContextNote({
+    word,
+    context,
+    annotation,
+    audio: audioField(filename),
+  });
   const noteId = await ankiRequest('addNote', { note }, request);
   if (typeof noteId !== 'number') {
     throw new Error('AnkiConnect did not return a note id');
@@ -162,10 +236,13 @@ module.exports = {
   ANKI_CONNECT_URL,
   DECK_NAME,
   MODEL_NAME,
+  audioField,
   buildAnnotationFields,
   buildContextNote,
+  buildMissingAnnotationFields,
   escapeHtml,
   findIncompleteContextNote,
+  mediaFilename,
   saveContextNote,
   unwrapAnkiResponse,
 };

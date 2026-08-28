@@ -8,6 +8,12 @@ import {
   DEFAULT_MODEL,
   generateAnnotation,
 } from './annotation.js';
+import {
+  DEFAULT_TTS_API_BASE_URL,
+  DEFAULT_TTS_MODEL,
+  DEFAULT_TTS_VOICE_ID,
+  generatePronunciation,
+} from './pronunciation.js';
 import { createContextSession, isSingleEnglishWord } from './workflow.js';
 
 const contextSession = createContextSession();
@@ -52,13 +58,27 @@ export const translate = (query) => {
           model: options.annotationModel || DEFAULT_MODEL,
           request: (requestOptions) => $http.request(requestOptions),
         }),
+      pronunciationProvider: () =>
+        generatePronunciation({
+          word: match.word,
+          apiKey: options.ttsApiKey || options.annotationApiKey,
+          apiBaseUrl: options.ttsApiBaseUrl || DEFAULT_TTS_API_BASE_URL,
+          model: options.ttsModel || DEFAULT_TTS_MODEL,
+          voiceId: options.ttsVoiceId || DEFAULT_TTS_VOICE_ID,
+          request: (requestOptions) => $http.request(requestOptions),
+          dataApi: $data,
+        }),
     })
-      .then(({ status }) => {
+      .then(({ status, repaired }) => {
         const message =
           status === 'added'
-            ? `已添加到 Anki（含释义）：${match.word}`
+            ? `已添加到 Anki（含释义和发音）：${match.word}`
             : status === 'updated'
-              ? `已补全 Anki 释义：${match.word}`
+              ? repaired.audio && repaired.annotation
+                ? `已补全 Anki 释义和发音：${match.word}`
+                : repaired.audio
+                  ? `已补全 Anki 发音：${match.word}`
+                  : `已补全 Anki 释义：${match.word}`
               : `Anki 已有完整卡片：${match.word}`;
         complete(query, message, [
           {
@@ -71,18 +91,27 @@ export const translate = (query) => {
         const annotationFailure = String(error?.code || '').startsWith(
           'annotation_',
         );
+        const pronunciationFailure = String(error?.code || '').startsWith(
+          'pronunciation_',
+        );
         query.onCompletion({
           error: {
             type: 'api',
             message: annotationFailure
               ? '注释生成失败，未创建卡片'
-              : '无法写入 Anki',
+              : pronunciationFailure
+                ? '发音生成失败，未创建卡片'
+                : '无法写入 Anki',
             addition:
               error?.code === 'annotation_config'
                 ? '请在插件设置中填写注释 API Key、地址和模型。'
-                : annotationFailure
-                  ? '请检查注释服务配置或稍后重试。'
-                  : '请确认 Anki 已打开，并已启用 AnkiConnect。',
+                : error?.code === 'pronunciation_config'
+                  ? '请在插件设置中填写发音 API Key、地址、模型和音色。'
+                  : annotationFailure
+                    ? '请检查注释服务配置或稍后重试。'
+                    : pronunciationFailure
+                      ? '请检查 MiniMax 发音配置或稍后重试。'
+                      : '请确认 Anki 已打开，并已启用 AnkiConnect。',
           },
         });
       });

@@ -44,6 +44,17 @@ if (
 ) {
   throw new Error('Annotation API key option is not securely configured');
 }
+const ttsApiKeyOption = info.options?.find(
+  (option) => option.identifier === 'ttsApiKey',
+);
+if (
+  !ttsApiKeyOption ||
+  ttsApiKeyOption.type !== 'text' ||
+  ttsApiKeyOption.textConfig?.type !== 'secure' ||
+  ttsApiKeyOption.defaultValue !== ''
+) {
+  throw new Error('Pronunciation API key option is not securely configured');
+}
 
 const main = zip.readAsText('main.js');
 if (/sk-[A-Za-z0-9_-]{12,}/.test(main)) {
@@ -58,6 +69,15 @@ if (
   !main.includes('reasoning_effort')
 ) {
   throw new Error('Release artifact is missing annotation provider safeguards');
+}
+if (
+  !main.includes('/v1/t2a_v2') ||
+  !main.includes('speech-2.8-hd') ||
+  !main.includes('English_Graceful_Lady') ||
+  !main.includes('storeMediaFile') ||
+  !main.includes('[sound:')
+) {
+  throw new Error('Release artifact is missing pronunciation safeguards');
 }
 
 const requiredNotices = [
@@ -85,6 +105,7 @@ console.log(
       entries,
       identifier: info.identifier,
       secureApiKeyOption: true,
+      secureTtsApiKeyOption: true,
       sha256,
       version: info.version,
     },
