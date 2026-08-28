@@ -1,26 +1,54 @@
 {
-  "identifier": "com.roojay.bobplug.anki",
+  "identifier": "com.huashan.bobplug.context-anki-probe",
   "category": "translate",
-  "version": "0.0.4",
-  "name": "生成anki卡片",
-  "summary": "生成anki卡片",
-  "author": "robbinhan",
-  "appcast": "https://raw.githubusercontent.com/robbinhan/anki/master/src/appcast.json",
-  "homepage": "https://github.com/robbinhan/bob-anki",
+  "version": "0.3.1",
+  "name": "上下文词卡",
+  "summary": "从整句中选择目标词并创建带上下文的 Anki 卡片",
+  "author": "geekhuashan",
+  "homepage": "https://github.com/geekhuashan/bob-context-anki",
   "icon": "001",
-  "minBobVersion": "1.8.0",
+  "minBobVersion": "1.20.0",
   "options": [
     {
-      "identifier": "token",
-      "type": "text",
-      "title": "智谱token"
+      "identifier": "minimumCefrLevel",
+      "type": "menu",
+      "title": "最低词汇等级",
+      "defaultValue": "B2",
+      "menuValues": [
+        {
+          "title": "A1 及以上（显示全部）",
+          "value": "A1"
+        },
+        {
+          "title": "A2 及以上",
+          "value": "A2"
+        },
+        {
+          "title": "B1 及以上",
+          "value": "B1"
+        },
+        {
+          "title": "B2 及以上（推荐）",
+          "value": "B2"
+        },
+        {
+          "title": "仅词表外 / 专业词",
+          "value": "UNKNOWN"
+        }
+      ],
+      "desc": "按 CEFR-J Wordlist 1.6 过滤。词表覆盖 A1-B2；未收录的技术词会单独保留。"
     },
     {
-      "identifier": "savePath",
+      "identifier": "ignoredWords",
       "type": "text",
-      "title": "文件名",
-      "defaultValue": "anki.txt",
-      "desc": "用与在anki没有启动时优先保存在文件中，方便后续导入anki牌组"
+      "title": "已认识词",
+      "defaultValue": "",
+      "textConfig": {
+        "type": "visible",
+        "height": 56,
+        "placeholderText": "多个单词用空格或逗号分隔"
+      },
+      "desc": "这些词不会出现在候选列表中，不区分大小写。"
     }
   ]
 }

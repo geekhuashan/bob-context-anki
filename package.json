@@ -1,67 +1,54 @@
 {
-  "name": "anki",
-  "version": "0.0.4",
-  "description": "生成anki卡片",
-  "homepage": "https://github.com/robbinhan/bob-anki",
-  "repository": "https://github.com/robbinhan/bob-anki.git",
-  "author": "robbinhan",
+  "name": "context-anki",
+  "version": "0.3.1",
+  "description": "从整句中选择目标词并创建带上下文的 Anki 卡片",
+  "homepage": "https://github.com/geekhuashan/bob-context-anki",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geekhuashan/bob-context-anki.git"
+  },
+  "bugs": {
+    "url": "https://github.com/geekhuashan/bob-context-anki/issues"
+  },
+  "author": "geekhuashan",
   "license": "MIT",
   "main": "src/main.js",
   "keywords": [
     "bob-plugin",
     "bobplugin",
     "translate",
-    "anki"
+    "anki",
+    "anki-connect",
+    "cefr"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "clear": "rimraf ./dist && rimraf ./release",
     "initInfo": "node ./scripts/init-info.js",
-    "install": "npm run initInfo",
-    "dev": "cross-env NODE_ENV=development rollup -c rollup.config.js --watch",
-    "build": "npm run clear && npm run initInfo && rollup -c rollup.config.js --configPlugin typescript --bundleConfigAsCjs && node ./scripts/build-zip.js",
+    "dev": "rollup -c rollup.config.js --bundleConfigAsCjs --watch",
+    "build": "npm run clear && npm run initInfo && rollup -c rollup.config.js --bundleConfigAsCjs && node ./scripts/build-zip.js",
     "type-check": "tsc --noEmit --allowJs",
-    "type-check:watch": "tsc --noEmit --allowJs --watch",
-    "prettier:fix": "prettier --config .prettierrc.js --write .",
-    "eslint": "eslint . -c .eslintrc.js --ext .ts,.tsx,.js",
-    "eslint:fix": "eslint . -c .eslintrc.js --fix --ext .ts,.tsx,.js",
-    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
-    "version": "npm run initInfo && npm run changelog && git add CHANGELOG.md src/info.json"
-  },
-  "dependencies": {
-    "@bob-plug/core": "^0.1.6",
-    "querystring": "^0.2.1"
+    "test": "node --test tests/*.test.js",
+    "check": "npm run test && npm run type-check",
+    "verify:release": "node ./scripts/verify-release.js",
+    "release:build": "npm run check && npm run build && npm run verify:release",
+    "generate:cefr": "node scripts/generate-cefr-data.js",
+    "type-check:watch": "tsc --noEmit --allowJs --watch"
   },
   "devDependencies": {
-    "@babel/core": "^7.14.6",
-    "@babel/preset-env": "^7.14.7",
-    "@babel/preset-typescript": "^7.14.5",
     "@bob-translate/types": "^1.0.2",
-    "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.3",
-    "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "@rollup/plugin-typescript": "12.1.2",
-    "@types/eslint-plugin-prettier": "^3.1.0",
     "@types/node": "^22.14.1",
-    "@typescript-eslint/eslint-plugin": "^4.28.2",
-    "@typescript-eslint/parser": "^4.28.2",
     "adm-zip": "^0.5.5",
-    "conventional-changelog-cli": "^2.1.1",
-    "cross-env": "^7.0.3",
-    "esbuild": "^0.12.15",
-    "eslint": "^7.30.0",
-    "eslint-config-airbnb-typescript": "^12.3.1",
-    "eslint-import-resolver-typescript": "^2.4.0",
-    "eslint-plugin-import": "^2.23.4",
-    "eslint-plugin-prettier": "^3.4.0",
     "fs-extra": "^10.0.0",
-    "prettier": "^2.3.2",
-    "rimraf": "^3.0.2",
+    "rimraf": "^6.0.1",
     "rollup": "4.40.0",
     "rollup-plugin-copy": "^3.5.0",
-    "rollup-plugin-esbuild": "^6.2.1",
-    "rollup-plugin-polyfill-node": "^0.13.0",
-    "tslib": "^2.8.1",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "xlsx": "0.18.5"
   }
 }

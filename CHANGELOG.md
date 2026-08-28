@@ -1,16 +1,24 @@
-# 0.0.4
-- 切换到智普模型，可以自己申请免费的智普token
-- 修复savepath只能保存一个翻译结果的问题
-- 修复一些历史问题
+# Changelog
 
-# 0.0.3
+## 0.3.1 - 2026-08-28
 
-anki没有打开时写入配置的备用文件中，后续可以手动导入anki。默认文件存放在：~/Library/Containers/com.hezongyidev.Bob/Data/Documents/InstalledPluginSandbox/com.roojay.bobplug.anki/anki.txt
+- 过滤公式中的单字母变量。
+- 正确处理直撇号和弯撇号英语缩写，避免出现 `ve` 等残片。
+- 增加真实数学句子的回归测试。
 
-# 0.0.2
+## 0.3.0 - 2026-08-28
 
-写入anki前做去重判断
+- 使用 CEFR-J Wordlist 1.6 对候选词分级。
+- 默认只显示 B2 及以上和词表外术语。
+- 支持最低等级设置和个人“已认识词”排除列表。
 
-# 0.0.1
+## 0.2.0 - 2026-08-28
 
-查询记录自动写入anki牌组
+- 点击候选词后，将该词和原句写入 `Vocabulary Modern` 笔记。
+- 增加两分钟、一次性的上下文匹配会话。
+- 写入前通过 AnkiConnect 检查重复。
+- 移除外部翻译请求、API Key、文件回退和后台辅助进程。
+
+## 0.1.0 - 2026-08-28
+
+- 验证 Bob 的 `relatedWordParts` 候选词可以触发后续单词查询。
