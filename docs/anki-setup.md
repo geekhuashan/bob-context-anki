@@ -38,7 +38,7 @@ Vocabulary Modern
 8. `Source`
 9. `Audio`
 
-插件会写入 `Word`、`ExampleSentence` 和 `Source`，其他字段保持空白，可由其他 Anki 工作流后续补全。
+插件会写入 `Word`、`Phonetic`、`Definition`、`DefinitionZH`、`ContextMeaning`、`ExampleSentence`、`SentenceTranslation` 和 `Source`。`Audio` 暂时保持空白，可由其他 Anki 工作流后续补全。
 
 ## 4. 最小卡片模板
 

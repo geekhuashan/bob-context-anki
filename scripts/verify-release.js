@@ -33,6 +33,17 @@ if (info.version !== packageJson.version) {
 if (info.identifier !== 'com.huashan.bobplug.context-anki-probe') {
   throw new Error(`Unexpected plugin identifier: ${info.identifier}`);
 }
+const apiKeyOption = info.options?.find(
+  (option) => option.identifier === 'annotationApiKey',
+);
+if (
+  !apiKeyOption ||
+  apiKeyOption.type !== 'text' ||
+  apiKeyOption.textConfig?.type !== 'secure' ||
+  apiKeyOption.defaultValue !== ''
+) {
+  throw new Error('Annotation API key option is not securely configured');
+}
 
 const main = zip.readAsText('main.js');
 if (/sk-[A-Za-z0-9_-]{12,}/.test(main)) {
@@ -40,6 +51,13 @@ if (/sk-[A-Za-z0-9_-]{12,}/.test(main)) {
 }
 if (!main.includes('http://127.0.0.1:8765')) {
   throw new Error('Release artifact is missing the local AnkiConnect endpoint');
+}
+if (
+  !main.includes('https://api.minimaxi.com') ||
+  !main.includes('Authorization') ||
+  !main.includes('reasoning_effort')
+) {
+  throw new Error('Release artifact is missing annotation provider safeguards');
 }
 
 const requiredNotices = [
@@ -66,6 +84,7 @@ console.log(
       artifact: artifactName,
       entries,
       identifier: info.identifier,
+      secureApiKeyOption: true,
       sha256,
       version: info.version,
     },

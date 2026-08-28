@@ -1,7 +1,7 @@
 {
   "identifier": "com.huashan.bobplug.context-anki-probe",
   "category": "translate",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "name": "上下文词卡",
   "summary": "从整句中选择目标词并创建带上下文的 Anki 卡片",
   "author": "geekhuashan",
@@ -9,6 +9,42 @@
   "icon": "001",
   "minBobVersion": "1.20.0",
   "options": [
+    {
+      "identifier": "annotationApiKey",
+      "type": "text",
+      "title": "注释 API Key",
+      "defaultValue": "",
+      "textConfig": {
+        "type": "secure",
+        "height": 40,
+        "placeholderText": "sk-..."
+      },
+      "desc": "只在点击新词建卡时使用，由 Bob 安全保存，不会写入插件文件。"
+    },
+    {
+      "identifier": "annotationApiBaseUrl",
+      "type": "text",
+      "title": "注释 API 地址",
+      "defaultValue": "https://api.minimaxi.com",
+      "textConfig": {
+        "type": "visible",
+        "height": 40,
+        "placeholderText": "https://api.minimaxi.com"
+      },
+      "desc": "OpenAI 兼容地址；可填写服务根地址、/v1 地址或完整 chat/completions 地址。"
+    },
+    {
+      "identifier": "annotationModel",
+      "type": "text",
+      "title": "注释模型",
+      "defaultValue": "MiniMax-M2.1",
+      "textConfig": {
+        "type": "visible",
+        "height": 40,
+        "placeholderText": "MiniMax-M2.1"
+      },
+      "desc": "短结构化注释不启用推理。"
+    },
     {
       "identifier": "minimumCefrLevel",
       "type": "menu",
