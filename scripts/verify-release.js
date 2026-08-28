@@ -42,6 +42,19 @@ if (!main.includes('http://127.0.0.1:8765')) {
   throw new Error('Release artifact is missing the local AnkiConnect endpoint');
 }
 
+const requiredNotices = [
+  'Copyright (c) 2021 robbinhan',
+  'Permission is hereby granted, free of charge',
+  'https://github.com/robbinhan/bob-anki',
+  'CEFR-J Wordlist Version 1.6',
+  'https://www.cefr-j.org/download.html#cefrj_wordlist',
+];
+for (const notice of requiredNotices) {
+  if (!main.includes(notice)) {
+    throw new Error(`Release artifact is missing required notice: ${notice}`);
+  }
+}
+
 const sha256 = crypto
   .createHash('sha256')
   .update(fs.readFileSync(artifactPath))

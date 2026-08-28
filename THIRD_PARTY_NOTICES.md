@@ -14,7 +14,8 @@ selection, short-lived sentence matching, CEFR-J filtering, and custom Anki note
 workflow were developed in this repository.
 
 We thank robbinhan for making the original project available as open source.
-The original copyright and MIT permission notice are preserved in `LICENSE`.
+The original copyright and MIT permission notice are preserved in this
+distribution and in `LICENSE`.
 
 ## CEFR-J Wordlist Version 1.6
 

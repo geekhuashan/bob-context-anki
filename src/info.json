@@ -1,7 +1,7 @@
 {
   "identifier": "com.huashan.bobplug.context-anki-probe",
   "category": "translate",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "name": "上下文词卡",
   "summary": "从整句中选择目标词并创建带上下文的 Anki 卡片",
   "author": "geekhuashan",
