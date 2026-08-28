@@ -74,6 +74,10 @@ pnpm release:build
 
 插件只向本机 `http://127.0.0.1:8765` 发送 AnkiConnect 请求。它不包含 API Key，不访问远程翻译服务，也不读取其他 Bob 插件的数据。
 
-## 许可证与来源
+## 致谢与代码来源
 
-代码按 [MIT License](LICENSE) 发布，基于 [robbinhan/bob-anki](https://github.com/robbinhan/bob-anki) 改造。CEFR-J 数据来源与许可说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目由 [robbinhan/bob-anki](https://github.com/robbinhan/bob-anki) 派生而来。感谢原作者 [robbinhan](https://github.com/robbinhan) 开源 Bob 插件的工程结构、打包流程和 AnkiConnect 集成实现，为本插件提供了基础。
+
+本仓库在此基础上重新实现了显式选词、短时上下文匹配、CEFR-J 分级、已认识词过滤以及面向自定义笔记类型的 Anki 写入流程。
+
+代码继续按 [MIT License](LICENSE) 发布，并在许可证中保留原作者的版权声明。更完整的原项目引用和 CEFR-J 数据来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

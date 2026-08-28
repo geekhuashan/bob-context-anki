@@ -1,5 +1,21 @@
 # Third-Party Notices
 
+## robbinhan/bob-anki
+
+This project is a derivative work of `robbinhan/bob-anki`:
+
+- Original author: robbinhan
+- Source: https://github.com/robbinhan/bob-anki
+- License: MIT License
+
+The project retains or adapts portions of the original Bob plugin project
+structure, packaging workflow, and AnkiConnect integration. The contextual word
+selection, short-lived sentence matching, CEFR-J filtering, and custom Anki note
+workflow were developed in this repository.
+
+We thank robbinhan for making the original project available as open source.
+The original copyright and MIT permission notice are preserved in `LICENSE`.
+
 ## CEFR-J Wordlist Version 1.6
 
 This plugin includes a derived lookup table from:
