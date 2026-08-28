@@ -5,7 +5,9 @@ const {
   audioField,
   buildContextNote,
   escapeHtml,
+  legacyMediaFilename,
   mediaFilename,
+  pronunciationAttribution,
   saveContextNote,
 } = require('../src/anki');
 
@@ -17,6 +19,20 @@ const annotation = {
   sentenceTranslation: '我立即采取了行动。',
 };
 const audioBase64 = 'SUQzBAAAAAA=';
+const dictionaryPronunciation = {
+  base64: audioBase64,
+  source: 'dictionary-us',
+  attribution: {
+    sourceUrl: 'https://commons.wikimedia.org/w/index.php?curid=694317',
+    artist: 'Dvortygirl',
+    licenseName: 'BY-SA 3.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0',
+  },
+};
+const minimaxPronunciation = {
+  base64: audioBase64,
+  source: 'minimax',
+};
 
 function noteFields(values = {}) {
   return Object.fromEntries(
@@ -32,13 +48,14 @@ function completeFields(overrides = {}) {
     DefinitionZH: annotation.definitionZH,
     ContextMeaning: annotation.contextMeaning,
     SentenceTranslation: annotation.sentenceTranslation,
-    Audio: audioField(mediaFilename('immediately')),
+    Source: 'Bob 划词',
+    Audio: audioField(mediaFilename('immediately', 'dictionary-us')),
     ...overrides,
   });
 }
 
 test('builds a Vocabulary Modern note with context and playable audio', () => {
-  const audio = audioField(mediaFilename('immediately'));
+  const audio = audioField(mediaFilename('immediately', 'dictionary-us'));
   const note = buildContextNote({
     word: 'immediately',
     context: 'I took action immediately.',
@@ -57,7 +74,10 @@ test('builds a Vocabulary Modern note with context and playable audio', () => {
     note.fields.SentenceTranslation,
     annotation.sentenceTranslation,
   );
-  assert.equal(note.fields.Audio, '[sound:bob-context-immediately.mp3]');
+  assert.equal(
+    note.fields.Audio,
+    '[sound:bob-context-immediately-dictionary-us.mp3]',
+  );
   assert.equal(note.fields.Source, 'Bob 划词');
   assert.deepEqual(note.tags, ['bob', 'context-word']);
 });
@@ -93,11 +113,15 @@ test('generates annotation and pronunciation in parallel before adding', async (
     pronunciationProvider: async () => {
       calls.push('pronunciation');
       assert.equal(annotationFinished, false);
-      return audioBase64;
+      return dictionaryPronunciation;
     },
   });
 
-  assert.deepEqual(result, { status: 'added', noteId: 123456 });
+  assert.deepEqual(result, {
+    status: 'added',
+    noteId: 123456,
+    pronunciationSource: 'dictionary-us',
+  });
   assert.deepEqual(calls, [
     'canAddNotes',
     'annotation',
@@ -106,7 +130,13 @@ test('generates annotation and pronunciation in parallel before adding', async (
     'addNote',
   ]);
   assert.equal(storedData, audioBase64);
-  assert.equal(addedNote.fields.Audio, '[sound:bob-context-immediately.mp3]');
+  assert.equal(
+    addedNote.fields.Audio,
+    '[sound:bob-context-immediately-dictionary-us.mp3]',
+  );
+  assert.match(addedNote.fields.Source, /Wikimedia Commons/);
+  assert.match(addedNote.fields.Source, /Dvortygirl/);
+  assert.match(addedNote.fields.Source, /BY-SA 3\.0/);
 });
 
 test('complete duplicates consume no annotation or pronunciation quota', async () => {
@@ -144,12 +174,117 @@ test('complete duplicates consume no annotation or pronunciation quota', async (
     },
     pronunciationProvider: async () => {
       providerCalls += 1;
-      return audioBase64;
+      return dictionaryPronunciation;
     },
   });
 
   assert.deepEqual(result, { status: 'duplicate' });
   assert.deepEqual(calls, ['canAddNotes', 'findNotes', 'notesInfo']);
+  assert.equal(providerCalls, 0);
+});
+
+test('migrates a legacy 0.5 audio reference once', async () => {
+  let currentAudio = audioField(legacyMediaFilename('immediately'));
+  let pronunciationCalls = 0;
+  let storedFilename;
+  const request = async ({ body }) => {
+    if (body.action === 'canAddNotes') {
+      return { data: { result: [false], error: null } };
+    }
+    if (body.action === 'findNotes') {
+      return { data: { result: [42], error: null } };
+    }
+    if (body.action === 'notesInfo') {
+      return {
+        data: {
+          result: [
+            {
+              noteId: 42,
+              tags: ['bob', 'context-word'],
+              fields: completeFields({ Audio: currentAudio }),
+            },
+          ],
+          error: null,
+        },
+      };
+    }
+    if (body.action === 'storeMediaFile') {
+      storedFilename = body.params.filename;
+      return { data: { result: storedFilename, error: null } };
+    }
+    if (body.action === 'updateNoteFields') {
+      currentAudio = body.params.note.fields.Audio;
+      return { data: { result: null, error: null } };
+    }
+    assert.fail(`unexpected action: ${body.action}`);
+  };
+  const options = {
+    word: 'immediately',
+    context: 'I took action immediately.',
+    request,
+    annotationProvider: async () => assert.fail('annotation should not run'),
+    pronunciationProvider: async () => {
+      pronunciationCalls += 1;
+      return minimaxPronunciation;
+    },
+  };
+
+  const migrated = await saveContextNote(options);
+  const repeated = await saveContextNote(options);
+
+  assert.deepEqual(migrated, {
+    status: 'updated',
+    noteId: 42,
+    repaired: { annotation: false, audio: true },
+    pronunciationSource: 'minimax',
+  });
+  assert.deepEqual(repeated, { status: 'duplicate' });
+  assert.equal(pronunciationCalls, 1);
+  assert.equal(storedFilename, 'bob-context-immediately-minimax.mp3');
+  assert.equal(currentAudio, '[sound:bob-context-immediately-minimax.mp3]');
+});
+
+test('preserves a complete card with custom pronunciation audio', async () => {
+  let providerCalls = 0;
+  const request = async ({ body }) => {
+    if (body.action === 'canAddNotes') {
+      return { data: { result: [false], error: null } };
+    }
+    if (body.action === 'findNotes') {
+      return { data: { result: [42], error: null } };
+    }
+    if (body.action === 'notesInfo') {
+      return {
+        data: {
+          result: [
+            {
+              noteId: 42,
+              tags: ['bob', 'context-word'],
+              fields: completeFields({ Audio: '[sound:custom-recording.mp3]' }),
+            },
+          ],
+          error: null,
+        },
+      };
+    }
+    assert.fail(`unexpected action: ${body.action}`);
+  };
+
+  const result = await saveContextNote({
+    word: 'immediately',
+    context: 'I took action immediately.',
+    request,
+    annotationProvider: async () => {
+      providerCalls += 1;
+      return annotation;
+    },
+    pronunciationProvider: async () => {
+      providerCalls += 1;
+      return dictionaryPronunciation;
+    },
+  });
+
+  assert.deepEqual(result, { status: 'duplicate' });
   assert.equal(providerCalls, 0);
 });
 
@@ -194,17 +329,20 @@ test('repairs only missing audio without regenerating annotations', async () => 
       annotationCalls += 1;
       return annotation;
     },
-    pronunciationProvider: async () => audioBase64,
+    pronunciationProvider: async () => dictionaryPronunciation,
   });
 
   assert.deepEqual(result, {
     status: 'updated',
     noteId: 42,
     repaired: { annotation: false, audio: true },
+    pronunciationSource: 'dictionary-us',
   });
   assert.equal(annotationCalls, 0);
   assert.deepEqual(updatedFields, {
-    Audio: '[sound:bob-context-immediately.mp3]',
+    Audio: '[sound:bob-context-immediately-dictionary-us.mp3]',
+    Source:
+      'Bob 划词<br><small>真人美音：<a href="https://commons.wikimedia.org/w/index.php?curid=694317">Wikimedia Commons</a>（Dvortygirl） · <a href="https://creativecommons.org/licenses/by-sa/3.0">BY-SA 3.0</a></small>',
   });
   assert.deepEqual(calls, [
     'canAddNotes',
@@ -250,7 +388,7 @@ test('repairs only missing annotation fields without regenerating audio', async 
     annotationProvider: async () => annotation,
     pronunciationProvider: async () => {
       pronunciationCalls += 1;
-      return audioBase64;
+      return dictionaryPronunciation;
     },
   });
 
@@ -296,12 +434,15 @@ test('repairs annotations and audio together on a plugin-owned card', async () =
     context: 'I took action immediately.',
     request,
     annotationProvider: async () => annotation,
-    pronunciationProvider: async () => audioBase64,
+    pronunciationProvider: async () => dictionaryPronunciation,
   });
 
   assert.deepEqual(result.repaired, { annotation: true, audio: true });
   assert.equal(updatedFields.DefinitionZH, annotation.definitionZH);
-  assert.equal(updatedFields.Audio, '[sound:bob-context-immediately.mp3]');
+  assert.equal(
+    updatedFields.Audio,
+    '[sound:bob-context-immediately-dictionary-us.mp3]',
+  );
   assert.deepEqual(calls, [
     'canAddNotes',
     'findNotes',
@@ -346,7 +487,7 @@ test('does not enrich incomplete duplicate cards owned by another workflow', asy
     },
     pronunciationProvider: async () => {
       providerCalls += 1;
-      return audioBase64;
+      return dictionaryPronunciation;
     },
   });
 
@@ -378,7 +519,7 @@ test('provider failures do not store media or create a note', async () => {
           if (failedProvider === 'pronunciation') {
             throw new Error('pronunciation failed');
           }
-          return audioBase64;
+          return dictionaryPronunciation;
         },
       }),
       new RegExp(`${failedProvider} failed`),
@@ -406,7 +547,7 @@ test('media storage failure does not create or update a note', async () => {
       context: 'I took action immediately.',
       request,
       annotationProvider: async () => annotation,
-      pronunciationProvider: async () => audioBase64,
+      pronunciationProvider: async () => dictionaryPronunciation,
     }),
     /media failed/,
   );
@@ -414,11 +555,38 @@ test('media storage failure does not create or update a note', async () => {
 });
 
 test('uses deterministic safe media filenames', () => {
-  assert.equal(mediaFilename('Daunting'), 'bob-context-daunting.mp3');
-  assert.equal(mediaFilename('follow-up'), 'bob-context-follow-up.mp3');
   assert.equal(
-    audioField(mediaFilename('Daunting')),
-    '[sound:bob-context-daunting.mp3]',
+    mediaFilename('Daunting', 'dictionary-us'),
+    'bob-context-daunting-dictionary-us.mp3',
+  );
+  assert.equal(
+    mediaFilename('follow-up', 'minimax'),
+    'bob-context-follow-up-minimax.mp3',
+  );
+  assert.equal(
+    legacyMediaFilename('Daunting'),
+    'bob-context-daunting.mp3',
+  );
+  assert.equal(
+    audioField(mediaFilename('Daunting', 'dictionary-us')),
+    '[sound:bob-context-daunting-dictionary-us.mp3]',
+  );
+});
+
+test('labels only safe dictionary attribution links', () => {
+  assert.equal(
+    pronunciationAttribution({
+      source: 'dictionary-us',
+      attribution: { sourceUrl: 'http://insecure.example/audio' },
+    }),
+    '',
+  );
+  assert.match(
+    pronunciationAttribution({
+      source: 'dictionary-us',
+      attribution: { sourceUrl: 'https://dictionary.example/audio' },
+    }),
+    />录音来源<\/a>/,
   );
 });
 

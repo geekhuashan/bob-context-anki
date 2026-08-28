@@ -20,7 +20,7 @@ Generated directories `dist/` and `release/` are intentionally ignored.
 - Add focused regression tests for behavior changes.
 - Keep ordinary sentence translation free of Anki writes.
 - Never add API keys to source, fixtures, logs, or release artifacts.
-- Keep remote annotation and pronunciation calls explicit, user-configured, and downstream of the Anki duplicate check.
+- Keep remote annotation and pronunciation calls downstream of the Anki duplicate check. Dictionary and Wikimedia media lookup must remain anonymous, exact-word, US-only, HTTPS-only, and bounded; MiniMax remains the fallback.
 - Store generated audio through AnkiConnect and write only `[sound:filename]` into the `Audio` field.
 - Do not add Bob database reads, background scanners, or Accessibility automation.
 - Keep the release artifact limited to `info.json` and `main.js`.

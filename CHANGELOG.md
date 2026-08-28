@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-08-28
+
+- 优先下载目标词在 Free Dictionary API 中明确标记为 US English 的真人发音；词条提供 Wikimedia Commons 原始页时，使用该页的同录音 MP3 转码地址。
+- 拒绝英音、未标明美音、非 HTTPS 和非 MP3 的词典音频；查询、下载或内容异常时自动回退到 MiniMax。
+- 发音媒体文件名记录 `dictionary-us` 或 `minimax` 来源，Bob 的完成提示会显示实际使用的来源。
+- 真人录音的来源页、录音者和许可会写入卡片 `Source` 字段，满足音频条目的署名要求。
+- `0.5.x` 的旧版 MiniMax 音频会在下一次点击对应词时迁移一次；其他自定义音频保持不变。
+- 词典请求不携带 API Key，MiniMax Key 只在兜底请求中发送。
+
 ## 0.5.0 - 2026-08-28
 
 - 使用 MiniMax `speech-2.8-hd` 为目标词生成英语 MP3 发音并存入 Anki 媒体库。

@@ -71,6 +71,10 @@ if (
   throw new Error('Release artifact is missing annotation provider safeguards');
 }
 if (
+  !main.includes('https://api.dictionaryapi.dev') ||
+  !main.includes('https://commons.wikimedia.org') ||
+  !main.includes('dictionary-us') ||
+  !main.includes('minimax') ||
   !main.includes('/v1/t2a_v2') ||
   !main.includes('speech-2.8-hd') ||
   !main.includes('English_Graceful_Lady') ||
@@ -86,6 +90,8 @@ const requiredNotices = [
   'https://github.com/robbinhan/bob-anki',
   'CEFR-J Wordlist Version 1.6',
   'https://www.cefr-j.org/download.html#cefrj_wordlist',
+  'https://github.com/meetDeveloper/freeDictionaryAPI',
+  'https://www.mediawiki.org/wiki/API:Video_info',
 ];
 for (const notice of requiredNotices) {
   if (!main.includes(notice)) {

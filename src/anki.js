@@ -17,7 +17,49 @@ function escapeHtml(value) {
     .replaceAll('"', '&quot;');
 }
 
-function buildContextNote({ word, context, annotation = {}, audio = '' }) {
+function safeHttpsUrl(value) {
+  const url = String(value || '').trim();
+  return url.startsWith('https://') ? url : '';
+}
+
+function pronunciationAttribution(pronunciation) {
+  if (pronunciation?.source !== 'dictionary-us') return '';
+  const sourceUrl = safeHttpsUrl(pronunciation.attribution?.sourceUrl);
+  if (!sourceUrl) return '';
+
+  const artist = escapeHtml(pronunciation.attribution?.artist);
+  const licenseName = escapeHtml(pronunciation.attribution?.licenseName);
+  const licenseUrl = safeHttpsUrl(pronunciation.attribution?.licenseUrl);
+  const sourceLabel = sourceUrl.startsWith(
+    'https://commons.wikimedia.org/',
+  )
+    ? 'Wikimedia Commons'
+    : '录音来源';
+  const creator = artist ? `（${artist}）` : '';
+  const license = licenseName
+    ? licenseUrl
+      ? ` · <a href="${escapeHtml(licenseUrl)}">${licenseName}</a>`
+      : ` · ${licenseName}`
+    : '';
+  return `<small>真人美音：<a href="${escapeHtml(
+    sourceUrl,
+  )}">${sourceLabel}</a>${creator}${license}</small>`;
+}
+
+function sourceField(existingSource, pronunciation) {
+  const existing = String(existingSource || '').trim() || 'Bob 划词';
+  const attribution = pronunciationAttribution(pronunciation);
+  if (!attribution || existing.includes(attribution)) return existing;
+  return `${existing}<br>${attribution}`;
+}
+
+function buildContextNote({
+  word,
+  context,
+  annotation = {},
+  audio = '',
+  pronunciation = null,
+}) {
   return {
     deckName: DECK_NAME,
     modelName: MODEL_NAME,
@@ -29,7 +71,7 @@ function buildContextNote({ word, context, annotation = {}, audio = '' }) {
       ContextMeaning: escapeHtml(annotation.contextMeaning),
       ExampleSentence: escapeHtml(context),
       SentenceTranslation: escapeHtml(annotation.sentenceTranslation),
-      Source: 'Bob 划词',
+      Source: sourceField('Bob 划词', pronunciation),
       Audio: audio,
     },
     options: {
@@ -62,14 +104,25 @@ function buildMissingAnnotationFields(annotation, note) {
   );
 }
 
-function mediaFilename(word) {
+function safeMediaWord(word) {
   const safeWord = String(word || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   if (!safeWord) throw new Error('Cannot build a pronunciation filename');
-  return `bob-context-${safeWord}.mp3`;
+  return safeWord;
+}
+
+function legacyMediaFilename(word) {
+  return `bob-context-${safeMediaWord(word)}.mp3`;
+}
+
+function mediaFilename(word, source) {
+  if (!['dictionary-us', 'minimax'].includes(source)) {
+    throw new Error('Pronunciation source is invalid');
+  }
+  return `bob-context-${safeMediaWord(word)}-${source}.mp3`;
 }
 
 function audioField(filename) {
@@ -105,6 +158,27 @@ function fieldValue(note, field) {
   return String(note?.fields?.[field]?.value || '').trim();
 }
 
+function hasCurrentPronunciation(note, word) {
+  const audio = fieldValue(note, 'Audio');
+  if (!audio) return false;
+  return audio !== audioField(legacyMediaFilename(word));
+}
+
+function normalizePronunciationResult(result) {
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    typeof result.base64 !== 'string' ||
+    !result.base64
+  ) {
+    throw new Error('Pronunciation provider returned invalid audio');
+  }
+  if (!['dictionary-us', 'minimax'].includes(result.source)) {
+    throw new Error('Pronunciation provider returned an invalid source');
+  }
+  return result;
+}
+
 async function findIncompleteContextNote(word, request) {
   const noteIds = await ankiRequest(
     'findNotes',
@@ -129,7 +203,7 @@ async function findIncompleteContextNote(word, request) {
       const annotationsComplete = Object.values(ANNOTATION_FIELD_MAP).every(
         (field) => fieldValue(note, field),
       );
-      const audioComplete = Boolean(fieldValue(note, 'Audio'));
+      const audioComplete = hasCurrentPronunciation(note, word);
       return exactWord && owned && !(annotationsComplete && audioComplete);
     }) || null
   );
@@ -156,7 +230,7 @@ async function saveContextNote({
     const needsAnnotation = Object.values(ANNOTATION_FIELD_MAP).some(
       (field) => !fieldValue(incompleteNote, field),
     );
-    const needsAudio = !fieldValue(incompleteNote, 'Audio');
+    const needsAudio = !hasCurrentPronunciation(incompleteNote, word);
     if (needsAnnotation && typeof annotationProvider !== 'function') {
       throw new Error('Annotation provider is missing');
     }
@@ -164,7 +238,7 @@ async function saveContextNote({
       throw new Error('Pronunciation provider is missing');
     }
 
-    const [annotation, audioBase64] = await Promise.all([
+    const [annotation, pronunciationResult] = await Promise.all([
       needsAnnotation ? annotationProvider() : null,
       needsAudio ? pronunciationProvider() : null,
     ]);
@@ -172,16 +246,24 @@ async function saveContextNote({
       ? buildMissingAnnotationFields(annotation, incompleteNote)
       : {};
     if (needsAudio) {
-      const filename = mediaFilename(word);
+      const pronunciation = normalizePronunciationResult(pronunciationResult);
+      const filename = mediaFilename(word, pronunciation.source);
       const storedFilename = await ankiRequest(
         'storeMediaFile',
-        { filename, data: audioBase64 },
+        { filename, data: pronunciation.base64 },
         request,
       );
       if (storedFilename !== filename) {
         throw new Error('AnkiConnect did not store the pronunciation media');
       }
       fields.Audio = audioField(filename);
+      const source = sourceField(
+        fieldValue(incompleteNote, 'Source'),
+        pronunciation,
+      );
+      if (source !== fieldValue(incompleteNote, 'Source')) {
+        fields.Source = source;
+      }
     }
     await ankiRequest(
       'updateNoteFields',
@@ -197,6 +279,7 @@ async function saveContextNote({
       status: 'updated',
       noteId: incompleteNote.noteId,
       repaired: { annotation: needsAnnotation, audio: needsAudio },
+      pronunciationSource: pronunciationResult?.source || null,
     };
   }
 
@@ -206,14 +289,15 @@ async function saveContextNote({
   if (typeof pronunciationProvider !== 'function') {
     throw new Error('Pronunciation provider is missing');
   }
-  const [annotation, audioBase64] = await Promise.all([
+  const [annotation, pronunciationResult] = await Promise.all([
     annotationProvider(),
     pronunciationProvider(),
   ]);
-  const filename = mediaFilename(word);
+  const pronunciation = normalizePronunciationResult(pronunciationResult);
+  const filename = mediaFilename(word, pronunciation.source);
   const storedFilename = await ankiRequest(
     'storeMediaFile',
-    { filename, data: audioBase64 },
+    { filename, data: pronunciation.base64 },
     request,
   );
   if (storedFilename !== filename) {
@@ -224,12 +308,17 @@ async function saveContextNote({
     context,
     annotation,
     audio: audioField(filename),
+    pronunciation,
   });
   const noteId = await ankiRequest('addNote', { note }, request);
   if (typeof noteId !== 'number') {
     throw new Error('AnkiConnect did not return a note id');
   }
-  return { status: 'added', noteId };
+  return {
+    status: 'added',
+    noteId,
+    pronunciationSource: pronunciation.source,
+  };
 }
 
 module.exports = {
@@ -242,7 +331,13 @@ module.exports = {
   buildMissingAnnotationFields,
   escapeHtml,
   findIncompleteContextNote,
+  hasCurrentPronunciation,
+  legacyMediaFilename,
   mediaFilename,
+  normalizePronunciationResult,
+  pronunciationAttribution,
+  safeHttpsUrl,
   saveContextNote,
+  sourceField,
   unwrapAnkiResponse,
 };

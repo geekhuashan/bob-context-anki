@@ -12,7 +12,7 @@ import {
   DEFAULT_TTS_API_BASE_URL,
   DEFAULT_TTS_MODEL,
   DEFAULT_TTS_VOICE_ID,
-  generatePronunciation,
+  generatePreferredPronunciation,
 } from './pronunciation.js';
 import { createContextSession, isSingleEnglishWord } from './workflow.js';
 
@@ -59,7 +59,7 @@ export const translate = (query) => {
           request: (requestOptions) => $http.request(requestOptions),
         }),
       pronunciationProvider: () =>
-        generatePronunciation({
+        generatePreferredPronunciation({
           word: match.word,
           apiKey: options.ttsApiKey || options.annotationApiKey,
           apiBaseUrl: options.ttsApiBaseUrl || DEFAULT_TTS_API_BASE_URL,
@@ -69,15 +69,19 @@ export const translate = (query) => {
           dataApi: $data,
         }),
     })
-      .then(({ status, repaired }) => {
+      .then(({ status, repaired, pronunciationSource }) => {
+        const pronunciationLabel =
+          pronunciationSource === 'dictionary-us'
+            ? '真人美音'
+            : 'MiniMax 发音';
         const message =
           status === 'added'
-            ? `已添加到 Anki（含释义和发音）：${match.word}`
+            ? `已添加到 Anki（含释义和${pronunciationLabel}）：${match.word}`
             : status === 'updated'
               ? repaired.audio && repaired.annotation
-                ? `已补全 Anki 释义和发音：${match.word}`
+                ? `已补全 Anki 释义和${pronunciationLabel}：${match.word}`
                 : repaired.audio
-                  ? `已补全 Anki 发音：${match.word}`
+                  ? `已更新 Anki ${pronunciationLabel}：${match.word}`
                   : `已补全 Anki 释义：${match.word}`
               : `Anki 已有完整卡片：${match.word}`;
         complete(query, message, [

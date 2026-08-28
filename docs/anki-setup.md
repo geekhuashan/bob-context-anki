@@ -38,7 +38,9 @@ Vocabulary Modern
 8. `Source`
 9. `Audio`
 
-插件会写入全部九个字段。`Audio` 的内容形如 `[sound:bob-context-daunting.mp3]`；对应 MP3 由 MiniMax 生成并通过 AnkiConnect 保存到 Anki 媒体库。
+插件会写入全部九个字段。`Audio` 的内容形如 `[sound:bob-context-immediately-dictionary-us.mp3]` 或 `[sound:bob-context-daunting-minimax.mp3]`；文件名会标明真人美音或 MiniMax 兜底来源，对应 MP3 通过 AnkiConnect 保存到 Anki 媒体库。
+
+真人录音的来源页、录音者和许可会追加到 `Source` 字段，现有的句子来源会保留。MiniMax 兜底音频不会添加第三方录音署名。
 
 请保留正面模板中的 `{{Audio}}`，否则音频虽然已经入库，卡片上也不会显示播放按钮。
 
